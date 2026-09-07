@@ -2,19 +2,19 @@ from langgraph.prebuilt import create_react_agent
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from tools import web_search , scrape_url 
+from tools import web_search, search, scrape_url, scrape
 from dotenv import load_dotenv
-
 import os
 
 load_dotenv()
 
-# model setup 
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+# Model setup 
+DEFAULT_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+FALLBACK_MODEL = "openai/gpt-oss-20b"
 
 def get_llm(model=None, max_tokens=None):
-    m = model or GROQ_MODEL
-    kwargs = {"model": m, "temperature": 0, "max_retries": 5}
+    m = model or DEFAULT_MODEL
+    kwargs = {"model": m, "temperature": 0, "max_retries": 3}
     if max_tokens:
         kwargs["max_tokens"] = max_tokens
     return ChatGroq(**kwargs)
@@ -25,12 +25,12 @@ llm = get_llm()
 def build_search_agent(model=None):
     prompt_msg = (
         "You are an autonomous research search agent. "
-        "Use the web_search tool once with a targeted query to find reliable, up-to-date sources. "
-        "Synthesize the key findings clearly and include the source URLs. Stop immediately after searching."
+        "Use the search or web_search tool once with a targeted, keyword-rich query to find recent, reliable sources. "
+        "After getting results, synthesize key findings clearly, include the source URLs found, and stop immediately."
     )
     return create_react_agent(
         get_llm(model),
-        tools=[web_search],
+        tools=[search, web_search],
         prompt=prompt_msg
     )
 
@@ -38,20 +38,18 @@ def build_search_agent(model=None):
 def build_reader_agent(model=None):
     prompt_msg = (
         "You are a research reader agent. "
-        "Inspect the search findings, choose the single most authoritative URL, "
-        "and call the scrape_url tool with the exact parameter url='<full_http_url>'. "
-        "CRITICAL: The 'url' parameter must be the complete web page URL string. Do not invent other parameter names like cursor or loc. "
-        "After scraping, summarize 3-5 factual insights and stop."
+        "Inspect the search findings, identify the most authoritative URL, and call scrape_url with that URL. "
+        "Summarize 3-5 factual insights from the scraped content and stop."
     )
     return create_react_agent(
         get_llm(model),
-        tools=[scrape_url],
+        tools=[scrape_url, scrape],
         prompt=prompt_msg
     )
 
-# writer chain 
+# Writer chain 
 writer_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are an expert research writer. Write clear, structured and insightful reports concisely."),
+    ("system", "You are an expert research writer. Write clear, structured, and insightful reports with proper citations."),
     ("human", """Write a detailed research report on the topic below.
 
 Topic: {topic}
@@ -59,13 +57,13 @@ Topic: {topic}
 Research Gathered:
 {research}
 
-Structure the report as:
-- Introduction
-- Key Findings (minimum 3 well-explained points)
-- Conclusion
-- Sources (list all URLs found in the research)
+Structure the report with the following clear sections:
+- Executive Summary
+- Key Findings & In-depth Analysis (minimum 3 well-explained points)
+- Future Implications / Outlook
+- References & Sources (list all URLs discovered)
 
-Be detailed, factual and professional."""),
+Be detailed, factual, and professional."""),
 ])
 
 def build_writer_chain(model=None):
@@ -73,32 +71,30 @@ def build_writer_chain(model=None):
 
 writer_chain = build_writer_chain()
 
-# critic chain 
+# Critic chain 
 critic_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a sharp, constructive research critic. Be concise and direct."),
+    ("system", "You are a sharp, constructive research critic. Evaluate objectively and be direct."),
     ("human", """Review the research report below and evaluate it strictly.
 
 Report:
 {report}
 
-Respond in this exact format:
-
-Score: X/10
+Provide your evaluation formatted as:
+Score: [X/10]
 
 Strengths:
-- ...
-- ...
+- [Point 1]
+- [Point 2]
 
-Areas to Improve:
-- ...
-- ...
+Weaknesses / Gaps:
+- [Point 1]
+- [Point 2]
 
-One line verdict:
-..."""),
+Final Recommendation:
+[1-2 sentences on how to improve or finalize]"""),
 ])
 
 def build_critic_chain(model=None):
-    return critic_prompt | get_llm(model, max_tokens=400) | StrOutputParser()
+    return critic_prompt | get_llm(model) | StrOutputParser()
 
 critic_chain = build_critic_chain()
-

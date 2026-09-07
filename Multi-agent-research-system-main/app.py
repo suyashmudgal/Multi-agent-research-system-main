@@ -353,8 +353,8 @@ div[role="radiogroup"] label:hover {
     border-bottom: 1px solid rgba(255,153,51,0.18);
 }
 .result-content {
-    font-size: 0.92rem; line-height: 1.8; color: #d9d0c1;
-    white-space: pre-wrap; font-family: 'DM Sans', sans-serif;
+    font-size: 0.92rem; line-height: 1.65; color: #d9d0c1;
+    font-family: 'DM Sans', sans-serif;
 }
 
 .report-panel {
@@ -465,9 +465,9 @@ st.markdown("""
 <div class="hero">
     <div class="hero-mark">🪔</div>
     <div class="hero-eyebrow">Multi-Agent Research System</div>
-    <div class="hero-devanagari">अन्वेषक</div>
-    <h1>Anve<span>shak</span></h1>
-    <p class="hero-sub">
+    <div class="hero-devanagari">खोज</div>
+    <h1>Khoj<span>AI</span></h1>
+    <p class="hero-sub" style="text-align: center !important; margin: 0 auto !important; display: block !important; max-width: 620px !important;">
         Four specialized AI agents work in harmony — searching, reading,
         writing, and critiquing — to bring you a polished research report on any topic.
     </p>
@@ -493,7 +493,7 @@ with col_input:
             <div class="card-icon">🪔</div>
             <div>
                 <div class="card-title">New Research</div>
-                <div class="card-sub">Point Anveshak at a topic and let the agents take over</div>
+                <div class="card-sub">Point Khoj at a topic and let the agents take over</div>
             </div>
         </div>
         <div class="card-inner-divider"></div>
@@ -524,7 +524,7 @@ with col_input:
         )
         chosen_model = "openai/gpt-oss-20b" if "Turbo" in model_mode else "openai/gpt-oss-120b"
 
-        run_btn = st.button("🪔  Begin Anveshan (Run Pipeline)", use_container_width=True, type="primary")
+        run_btn = st.button("🚀  Begin Khoj (Run Pipeline)", use_container_width=True, type="primary")
 
 with col_pipeline:
     r = st.session_state.results
@@ -576,6 +576,25 @@ if run_btn:
         st.session_state.done = False
         st.rerun()
 
+def run_step_with_fallback(builder_fn, invoke_args, model_name):
+    """Executes an agent or chain with automatic fallback to gpt-oss-20b if rate limited or invalid."""
+    try:
+        instance = builder_fn(model_name)
+        res = instance.invoke(invoke_args)
+        if isinstance(res, dict) and "messages" in res:
+            return res["messages"][-1].content
+        return res
+    except Exception as err:
+        err_msg = str(err)
+        # If model is 120b and encounters 429 (rate limit) or 400 (validation), fallback to 20b
+        if model_name != "openai/gpt-oss-20b" and ("429" in err_msg or "400" in err_msg or "rate_limit" in err_msg):
+            fallback_instance = builder_fn("openai/gpt-oss-20b")
+            res = fallback_instance.invoke(invoke_args)
+            if isinstance(res, dict) and "messages" in res:
+                return res["messages"][-1].content
+            return res
+        raise err
+
 if st.session_state.running and not st.session_state.done:
     results = {}
     topic_val = st.session_state.topic_input
@@ -584,45 +603,46 @@ if st.session_state.running and not st.session_state.done:
     try:
         # ── Step 1: Search ──
         with st.spinner("🔍  Search Agent is gathering web sources…"):
-            search_agent = build_search_agent(active_model)
-            sr = search_agent.invoke({
-                "messages": [("user", f"Find recent and reliable information about: {topic_val}")]
-            })
-            results["search"] = sr["messages"][-1].content
+            results["search"] = run_step_with_fallback(
+                build_search_agent,
+                {"messages": [("user", f"Find recent and reliable information about: {topic_val}")]},
+                active_model
+            )
             st.session_state.results = dict(results)
 
         # ── Step 2: Reader ──
         with st.spinner("📄  Reader Agent is extracting deep page content…"):
-            reader_agent = build_reader_agent(active_model)
-            rr = reader_agent.invoke({
-                "messages": [("user",
-                    f"Based on the following search results about '{topic_val}', "
+            results["reader"] = run_step_with_fallback(
+                build_reader_agent,
+                {"messages": [("user",
+                    f"Based on these search results about '{topic_val}', "
                     f"pick the most relevant URL and scrape it for deeper content.\n\n"
-                    f"Search Results:\n{results['search'][:1000]}"
-                )]
-            })
-            results["reader"] = rr["messages"][-1].content
+                    f"Search Findings:\n{results['search'][:1000]}"
+                )]},
+                active_model
+            )
             st.session_state.results = dict(results)
 
         # ── Step 3: Writer ──
         with st.spinner("🖋️  Writer is drafting the report…"):
             research_combined = (
-                f"SEARCH RESULTS:\n{results['search'][:3000]}\n\n"
-                f"DETAILED SCRAPED CONTENT:\n{results['reader'][:3000]}"
+                f"SEARCH FINDINGS:\n{results['search'][:2000]}\n\n"
+                f"SCRAPED DEEP CONTENT:\n{results['reader'][:2000]}"
             )
-            writer = build_writer_chain(active_model)
-            results["writer"] = writer.invoke({
-                "topic": topic_val,
-                "research": research_combined
-            })
+            results["writer"] = run_step_with_fallback(
+                build_writer_chain,
+                {"topic": topic_val, "research": research_combined},
+                active_model
+            )
             st.session_state.results = dict(results)
 
         # ── Step 4: Critic ──
         with st.spinner("🧭  Critic is reviewing the report…"):
-            critic = build_critic_chain(active_model)
-            results["critic"] = critic.invoke({
-                "report": results["writer"]
-            })
+            results["critic"] = run_step_with_fallback(
+                build_critic_chain,
+                {"report": results["writer"][:3000]},
+                active_model
+            )
             st.session_state.results = dict(results)
 
         st.session_state.running = False
@@ -645,13 +665,13 @@ if r:
     # Raw outputs in expanders
     if "search" in r:
         with st.expander("🔍  Search Results (raw)", expanded=False):
-            st.markdown(f'<div class="result-panel"><div class="result-panel-title">Search Agent Output</div>'
-                        f'<div class="result-content">{r["search"]}</div></div>', unsafe_allow_html=True)
+            st.markdown('<div class="result-panel-title">Search Agent Output</div>', unsafe_allow_html=True)
+            st.markdown(clean_text(r["search"]))
 
     if "reader" in r:
         with st.expander("📄  Scraped Content (raw)", expanded=False):
-            st.markdown(f'<div class="result-panel"><div class="result-panel-title">Reader Agent Output</div>'
-                        f'<div class="result-content">{r["reader"]}</div></div>', unsafe_allow_html=True)
+            st.markdown('<div class="result-panel-title">Reader Agent Output</div>', unsafe_allow_html=True)
+            st.markdown(clean_text(r["reader"]))
 
     # Final report
     if "writer" in r:
@@ -659,14 +679,14 @@ if r:
         <div class="report-panel">
             <div class="panel-label orange">📝 Final Research Report</div>
         """, unsafe_allow_html=True)
-        st.markdown(r["writer"])   # render markdown natively
+        st.markdown(clean_text(r["writer"]))   # render markdown natively
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Download
         st.download_button(
             label="⬇  Download Report (.md)",
             data=r["writer"],
-            file_name=f"anveshak_report_{int(time.time())}.md",
+            file_name=f"khoj_report_{int(time.time())}.md",
             mime="text/markdown",
             use_container_width=True,
         )
@@ -677,13 +697,13 @@ if r:
         <div class="feedback-panel">
             <div class="panel-label green">🧭 Critic Feedback</div>
         """, unsafe_allow_html=True)
-        st.markdown(r["critic"])
+        st.markdown(clean_text(r["critic"]))
         st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="notice">
-    <span>अन्वेषक</span> · Anveshak · Multi-agent LangChain pipeline · Built with Streamlit
+    <span>खोज</span> · Khoj AI · Multi-agent LangChain pipeline · Built with Streamlit
 </div>
 """, unsafe_allow_html=True)
