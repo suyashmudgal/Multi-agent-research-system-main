@@ -1,6 +1,13 @@
 import streamlit as st
 import time
-from agents import build_reader_agent, build_search_agent, writer_chain, critic_chain
+from agents import (
+    build_reader_agent,
+    build_search_agent,
+    build_writer_chain,
+    build_critic_chain,
+    writer_chain,
+    critic_chain
+)
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -342,6 +349,16 @@ with col_input:
         key="topic_input",
         label_visibility="visible",
     )
+
+    model_mode = st.radio(
+        "Performance Mode",
+        options=["⚡ Turbo Fast (~20s)", "🧠 Deep Research (~60s)"],
+        index=0,
+        horizontal=True,
+        help="Turbo Fast uses lightweight GPT-OSS-20B for ultra fast results. Deep Research uses GPT-OSS-120B for maximum detail."
+    )
+    chosen_model = "openai/gpt-oss-20b" if "Turbo" in model_mode else "openai/gpt-oss-120b"
+
     run_btn = st.button("⚡  Run Research Pipeline", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -400,6 +417,7 @@ if run_btn:
         st.warning("Please enter a research topic first.")
     else:
         st.session_state.results = {}
+        st.session_state.chosen_model = chosen_model
         st.session_state.running = True
         st.session_state.done = False
         st.rerun()
@@ -407,25 +425,26 @@ if run_btn:
 if st.session_state.running and not st.session_state.done:
     results = {}
     topic_val = st.session_state.topic_input
+    active_model = getattr(st.session_state, "chosen_model", "openai/gpt-oss-20b")
 
     try:
         # ── Step 1: Search ──
-        with st.spinner("🔍  Search Agent is working…"):
-            search_agent = build_search_agent()
+        with st.spinner("🔍  Search Agent is gathering web sources…"):
+            search_agent = build_search_agent(active_model)
             sr = search_agent.invoke({
-                "messages": [("user", f"Find recent, reliable and detailed information about: {topic_val}")]
+                "messages": [("user", f"Find recent and reliable information about: {topic_val}")]
             })
             results["search"] = sr["messages"][-1].content
             st.session_state.results = dict(results)
 
         # ── Step 2: Reader ──
-        with st.spinner("📄  Reader Agent is scraping top resources…"):
-            reader_agent = build_reader_agent()
+        with st.spinner("📄  Reader Agent is extracting deep page content…"):
+            reader_agent = build_reader_agent(active_model)
             rr = reader_agent.invoke({
                 "messages": [("user",
                     f"Based on the following search results about '{topic_val}', "
                     f"pick the most relevant URL and scrape it for deeper content.\n\n"
-                    f"Search Results:\n{results['search'][:800]}"
+                    f"Search Results:\n{results['search'][:1000]}"
                 )]
             })
             results["reader"] = rr["messages"][-1].content
@@ -434,10 +453,11 @@ if st.session_state.running and not st.session_state.done:
         # ── Step 3: Writer ──
         with st.spinner("✍️  Writer is drafting the report…"):
             research_combined = (
-                f"SEARCH RESULTS:\n{results['search']}\n\n"
-                f"DETAILED SCRAPED CONTENT:\n{results['reader']}"
+                f"SEARCH RESULTS:\n{results['search'][:3000]}\n\n"
+                f"DETAILED SCRAPED CONTENT:\n{results['reader'][:3000]}"
             )
-            results["writer"] = writer_chain.invoke({
+            writer = build_writer_chain(active_model)
+            results["writer"] = writer.invoke({
                 "topic": topic_val,
                 "research": research_combined
             })
@@ -445,7 +465,8 @@ if st.session_state.running and not st.session_state.done:
 
         # ── Step 4: Critic ──
         with st.spinner("🧐  Critic is reviewing the report…"):
-            results["critic"] = critic_chain.invoke({
+            critic = build_critic_chain(active_model)
+            results["critic"] = critic.invoke({
                 "report": results["writer"]
             })
             st.session_state.results = dict(results)

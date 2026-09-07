@@ -10,35 +10,36 @@ import os
 load_dotenv()
 
 # model setup 
-# Default to openai/gpt-oss-120b which has high rate limits (8000 TPM) and supports tool-calling on Groq
-GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-llm = ChatGroq(
-    model=GROQ_MODEL,
-    temperature=0,
-    max_retries=5
-)
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 
+def get_llm(model=None, max_tokens=None):
+    m = model or GROQ_MODEL
+    kwargs = {"model": m, "temperature": 0, "max_retries": 5}
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
+    return ChatGroq(**kwargs)
 
-#1st agent 
-def build_search_agent():
+llm = get_llm()
+
+# 1st agent: Search Agent
+def build_search_agent(model=None):
     return create_react_agent(
-        llm,
-        tools= [web_search]
+        get_llm(model),
+        tools=[web_search],
+        prompt="You are a fast research search agent. Perform a single web search with web_search, gather the most relevant findings and source URLs, and summarize them concisely. Stop immediately after searching."
     )
 
-#2nd agent 
-
-def build_reader_agent():
+# 2nd agent: Reader Agent
+def build_reader_agent(model=None):
     return create_react_agent(
-        llm,
-        tools = [scrape_url]
+        get_llm(model),
+        tools=[scrape_url],
+        prompt="You are a fast web reader agent. Pick the single best URL from the search findings, scrape it once with scrape_url, extract 3-5 concise factual insights, and stop immediately."
     )
 
-
-#writer chain 
-
+# writer chain 
 writer_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are an expert research writer. Write clear, structured and insightful reports."),
+    ("system", "You are an expert research writer. Write clear, structured and insightful reports concisely."),
     ("human", """Write a detailed research report on the topic below.
 
 Topic: {topic}
@@ -55,12 +56,14 @@ Structure the report as:
 Be detailed, factual and professional."""),
 ])
 
-writer_chain = writer_prompt | llm | StrOutputParser()
+def build_writer_chain(model=None):
+    return writer_prompt | get_llm(model) | StrOutputParser()
 
-#critic_chain 
+writer_chain = build_writer_chain()
 
+# critic chain 
 critic_prompt = ChatPromptTemplate.from_messages([
-     ("system", "You are a sharp and constructive research critic. Be honest and specific."),
+    ("system", "You are a sharp, constructive research critic. Be concise and direct."),
     ("human", """Review the research report below and evaluate it strictly.
 
 Report:
@@ -82,5 +85,8 @@ One line verdict:
 ..."""),
 ])
 
-critic_chain = critic_prompt | llm | StrOutputParser()
+def build_critic_chain(model=None):
+    return critic_prompt | get_llm(model, max_tokens=400) | StrOutputParser()
+
+critic_chain = build_critic_chain()
 

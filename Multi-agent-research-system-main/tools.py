@@ -26,10 +26,19 @@ def web_search(query : str) -> str:
 @tool
 def scrape_url(url: str) -> str:
     """Scrape and return clean text content from a given URL for deeper reading."""
+    # Fast path: try tavily extract first (handles dynamic JS, bot blocks, and extracts clean markdown)
     try:
-        resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+        res = tavily.extract(urls=[url])
+        if res and res.get("results") and res["results"][0].get("raw_content"):
+            return res["results"][0]["raw_content"][:3000]
+    except Exception:
+        pass
+
+    # Fallback: direct request with fast 4s timeout
+    try:
+        resp = requests.get(url, timeout=4, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         soup = BeautifulSoup(resp.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "footer"]):
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
         return soup.get_text(separator=" ", strip=True)[:3000]
     except Exception as e:
