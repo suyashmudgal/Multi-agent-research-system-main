@@ -520,12 +520,12 @@ with col_input:
 
         model_mode = st.radio(
             "Performance Mode",
-            options=["⚡ Turbo Fast (~20s)", "🧠 Deep Research (~60s)"],
+            options=["🧠 Deep Research (Llama 3.3 70B)", "⚡ Turbo Fast (Llama 3.1 8B)"],
             index=0,
             horizontal=True,
-            help="Turbo Fast uses lightweight GPT-OSS-20B for ultra fast results. Deep Research uses GPT-OSS-120B for maximum detail."
+            help="Deep Research uses Llama-3.3-70B for maximum detail. Turbo Fast uses lightweight Llama-3.1-8B for ultra fast results."
         )
-        chosen_model = "openai/gpt-oss-20b" if "Turbo" in model_mode else "openai/gpt-oss-120b"
+        chosen_model = "llama-3.3-70b-versatile" if "70B" in model_mode else "llama-3.1-8b-instant"
 
         run_btn = st.button("🚀  Begin Khoj (Run Pipeline)", use_container_width=True, type="primary")
 
@@ -614,7 +614,7 @@ if run_btn:
         st.rerun()
 
 def run_step_with_fallback(builder_fn, invoke_args, model_name):
-    """Executes an agent or chain with automatic fallback to gpt-oss-20b if rate limited or invalid."""
+    """Executes an agent or chain with automatic fallback to llama-3.1-8b-instant if rate limited or invalid."""
     try:
         instance = builder_fn(model_name)
         res = instance.invoke(invoke_args)
@@ -623,9 +623,9 @@ def run_step_with_fallback(builder_fn, invoke_args, model_name):
         return res
     except Exception as err:
         err_msg = str(err)
-        # If model is 120b and encounters 429 (rate limit) or 400 (validation), fallback to 20b
-        if model_name != "openai/gpt-oss-20b" and ("429" in err_msg or "400" in err_msg or "rate_limit" in err_msg):
-            fallback_instance = builder_fn("openai/gpt-oss-20b")
+        # If model encounters 429 (rate limit) or 400 (validation), fallback to llama-3.1-8b-instant
+        if model_name != "llama-3.1-8b-instant" and ("429" in err_msg or "400" in err_msg or "rate_limit" in err_msg):
+            fallback_instance = builder_fn("llama-3.1-8b-instant")
             res = fallback_instance.invoke(invoke_args)
             if isinstance(res, dict) and "messages" in res:
                 return res["messages"][-1].content
@@ -635,7 +635,7 @@ def run_step_with_fallback(builder_fn, invoke_args, model_name):
 if st.session_state.running and not st.session_state.done:
     results = {}
     topic_val = st.session_state.topic_input
-    active_model = getattr(st.session_state, "chosen_model", "openai/gpt-oss-20b")
+    active_model = getattr(st.session_state, "chosen_model", "llama-3.3-70b-versatile")
 
     try:
         # ── Step 1: Search ──

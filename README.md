@@ -95,7 +95,7 @@ Create a `.env` file in the root directory:
 ```env
 GROQ_API_KEY="your_groq_api_key_here"
 TAVILY_API_KEY="your_tavily_api_key_here"
-GROQ_MODEL="openai/gpt-oss-20b"
+GROQ_MODEL="llama-3.3-70b-versatile"
 ```
 > **Get Free API Keys:**
 > - [Groq Console](https://console.groq.com) (Ultra-fast LLM inference)
@@ -138,7 +138,7 @@ Multi-agent-research-system/
 ## 🛠️ Tech Stack
 
 - **Frameworks & Orchestration**: [LangChain](https://github.com/langchain-ai/langchain), [LangGraph](https://github.com/langchain-ai/langgraph) (ReAct Agent architecture)
-- **Inference Engine**: [Groq Cloud](https://groq.com/) LPUs (`openai/gpt-oss-20b` & `openai/gpt-oss-120b`)
+- **Inference Engine**: [Groq Cloud](https://groq.com/) LPUs (`llama-3.3-70b-versatile` & `llama-3.1-8b-instant`)
 - **Search & Retrieval**: [Tavily AI Search API](https://tavily.com/)
 - **Web Crawling & Parsing**: [BeautifulSoup4](https://www.crummy.com/software/BeautifulSoup/), Requests, Tavily Extract
 - **Frontend Dashboard**: [Streamlit](https://streamlit.io/) with custom responsive CSS
