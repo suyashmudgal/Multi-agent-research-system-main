@@ -9,8 +9,8 @@ import os
 load_dotenv()
 
 # Model setup 
-DEFAULT_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-FALLBACK_MODEL = "llama-3.1-8b-instant"
+DEFAULT_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+FALLBACK_MODEL = "openai/gpt-oss-20b"
 
 def get_groq_api_key(api_key=None):
     key = api_key or os.getenv("GROQ_API_KEY")
