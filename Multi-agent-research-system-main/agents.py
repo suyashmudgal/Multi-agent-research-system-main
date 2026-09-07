@@ -23,18 +23,30 @@ llm = get_llm()
 
 # 1st agent: Search Agent
 def build_search_agent(model=None):
+    prompt_msg = (
+        "You are an autonomous research search agent. "
+        "Use the web_search tool once with a targeted query to find reliable, up-to-date sources. "
+        "Synthesize the key findings clearly and include the source URLs. Stop immediately after searching."
+    )
     return create_react_agent(
         get_llm(model),
         tools=[web_search],
-        prompt="You are a fast research search agent. Perform a single web search with web_search, gather the most relevant findings and source URLs, and summarize them concisely. Stop immediately after searching."
+        prompt=prompt_msg
     )
 
 # 2nd agent: Reader Agent
 def build_reader_agent(model=None):
+    prompt_msg = (
+        "You are a research reader agent. "
+        "Inspect the search findings, choose the single most authoritative URL, "
+        "and call the scrape_url tool with the exact parameter url='<full_http_url>'. "
+        "CRITICAL: The 'url' parameter must be the complete web page URL string. Do not invent other parameter names like cursor or loc. "
+        "After scraping, summarize 3-5 factual insights and stop."
+    )
     return create_react_agent(
         get_llm(model),
         tools=[scrape_url],
-        prompt="You are a fast web reader agent. Pick the single best URL from the search findings, scrape it once with scrape_url, extract 3-5 concise factual insights, and stop immediately."
+        prompt=prompt_msg
     )
 
 # writer chain 

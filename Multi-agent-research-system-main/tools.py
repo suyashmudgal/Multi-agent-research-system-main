@@ -25,7 +25,11 @@ def web_search(query : str) -> str:
 
 @tool
 def scrape_url(url: str) -> str:
-    """Scrape and return clean text content from a given URL for deeper reading."""
+    """Scrape and extract clean textual content from a web page URL.
+    
+    Args:
+        url: The complete HTTP or HTTPS URL to fetch (e.g. 'https://en.wikipedia.org/wiki/...').
+    """
     # Fast path: try tavily extract first (handles dynamic JS, bot blocks, and extracts clean markdown)
     try:
         res = tavily.extract(urls=[url])
