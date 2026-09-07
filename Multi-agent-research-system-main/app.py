@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import re
 from agents import (
     build_reader_agent,
     build_search_agent,
@@ -8,6 +9,14 @@ from agents import (
     writer_chain,
     critic_chain
 )
+
+def clean_text(text: str) -> str:
+    """Strip extra vertical blank lines and redundant whitespace."""
+    if not text:
+        return ""
+    # Collapse 3 or more consecutive newlines down to 2
+    cleaned = re.sub(r'\n{3,}', '\n\n', text)
+    return cleaned.strip()
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -207,52 +216,45 @@ html, body, [class*="css"] {
 .result-panel {
     background: rgba(255,255,255,0.025);
     border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px;
-    padding: 1.8rem 2rem;
-    margin-top: 1rem;
-    margin-bottom: 1.5rem;
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.8rem;
 }
 .result-panel-title {
     font-family: 'DM Mono', monospace;
     font-size: 0.7rem;
-    font-weight: 500;
-    letter-spacing: 0.2em;
+    font-weight: 600;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
     color: #ff8c32;
-    margin-bottom: 1rem;
-    padding-bottom: 0.7rem;
+    margin-bottom: 0.8rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid rgba(255,140,50,0.15);
 }
 .result-content {
     font-size: 0.92rem;
-    line-height: 1.8;
+    line-height: 1.6;
     color: #cdc8bf;
-    white-space: pre-wrap;
     font-family: 'DM Sans', sans-serif;
+    margin: 0;
 }
 
 /* ── Report & feedback panels ── */
-.report-panel {
-    background: rgba(255,255,255,0.025);
-    border: 1px solid rgba(255,140,50,0.2);
-    border-radius: 16px;
-    padding: 2rem 2.5rem;
-    margin-top: 1rem;
-}
-.feedback-panel {
-    background: rgba(255,255,255,0.025);
-    border: 1px solid rgba(80,200,120,0.2);
-    border-radius: 16px;
-    padding: 2rem 2.5rem;
-    margin-top: 1rem;
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: rgba(255,255,255,0.02) !important;
+    border: 1px solid rgba(255,140,50,0.2) !important;
+    border-radius: 14px !important;
+    padding: 1.5rem 1.8rem !important;
+    margin-top: 0.8rem !important;
 }
 .panel-label {
     font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
+    font-size: 0.72rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    margin-bottom: 1.2rem;
-    padding-bottom: 0.7rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
 }
 .panel-label.orange {
     color: #ff8c32;
@@ -491,39 +493,33 @@ if r:
     # Raw outputs in expanders
     if "search" in r:
         with st.expander("🔍 Search Results (raw)", expanded=False):
-            st.markdown(f'<div class="result-panel"><div class="result-panel-title">Search Agent Output</div>'
-                        f'<div class="result-content">{r["search"]}</div></div>', unsafe_allow_html=True)
+            st.markdown('<div class="result-panel-title">Search Agent Output</div>', unsafe_allow_html=True)
+            st.markdown(clean_text(r["search"]))
 
     if "reader" in r:
         with st.expander("📄 Scraped Content (raw)", expanded=False):
-            st.markdown(f'<div class="result-panel"><div class="result-panel-title">Reader Agent Output</div>'
-                        f'<div class="result-content">{r["reader"]}</div></div>', unsafe_allow_html=True)
+            st.markdown('<div class="result-panel-title">Reader Agent Output</div>', unsafe_allow_html=True)
+            st.markdown(clean_text(r["reader"]))
 
     # Final report
     if "writer" in r:
-        st.markdown("""
-        <div class="report-panel">
-            <div class="panel-label orange">📝 Final Research Report</div>
-        """, unsafe_allow_html=True)
-        st.markdown(r["writer"])   # render markdown natively
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="panel-label orange">📝 Final Research Report</div>', unsafe_allow_html=True)
+            st.markdown(clean_text(r["writer"]))
 
-        # Download
-        st.download_button(
-            label="⬇  Download Report (.md)",
-            data=r["writer"],
-            file_name=f"research_report_{int(time.time())}.md",
-            mime="text/markdown",
-        )
+            # Download
+            st.download_button(
+                label="⬇  Download Report (.md)",
+                data=r["writer"],
+                file_name=f"research_report_{int(time.time())}.md",
+                mime="text/markdown",
+            )
 
     # Critic feedback
     if "critic" in r:
-        st.markdown("""
-        <div class="feedback-panel">
-            <div class="panel-label green">🧐 Critic Feedback</div>
-        """, unsafe_allow_html=True)
-        st.markdown(r["critic"])
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown('<div class="panel-label green">🧐 Critic Feedback</div>', unsafe_allow_html=True)
+            st.markdown(clean_text(r["critic"]))
 
 
 # ── Footer ────────────────────────────────────────────────────────────────────
