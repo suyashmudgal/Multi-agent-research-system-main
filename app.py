@@ -1,14 +1,17 @@
 import streamlit as st
 import time
 import re
+import os
 from agents import (
     build_reader_agent,
     build_search_agent,
     build_writer_chain,
     build_critic_chain,
+    get_groq_api_key,
     writer_chain,
     critic_chain
 )
+from tools import get_tavily_api_key
 
 def clean_text(text: str) -> str:
     """Clean redundant blank lines and whitespace."""
@@ -565,9 +568,43 @@ with col_pipeline:
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+# ── API Key Configuration (Sidebar & Secrets) ──────────────────────────────
+current_groq_key = get_groq_api_key()
+current_tavily_key = get_tavily_api_key()
+
+with st.sidebar:
+    st.markdown("### 🔑 API Configuration")
+    if current_groq_key and current_tavily_key:
+        st.success("API keys loaded and active ✓")
+    else:
+        st.info("Add keys below or set in Streamlit Cloud Secrets")
+    
+    sidebar_groq = st.text_input(
+        "Groq API Key",
+        value=current_groq_key,
+        type="password",
+        placeholder="gsk_...",
+        help="Get free key at console.groq.com"
+    )
+    sidebar_tavily = st.text_input(
+        "Tavily API Key",
+        value=current_tavily_key,
+        type="password",
+        placeholder="tvly-...",
+        help="Get free key at tavily.com"
+    )
+    if sidebar_groq:
+        os.environ["GROQ_API_KEY"] = sidebar_groq
+    if sidebar_tavily:
+        os.environ["TAVILY_API_KEY"] = sidebar_tavily
+
 # ── Run pipeline ──────────────────────────────────────────────────────────────
 if run_btn:
-    if not topic.strip():
+    active_groq = get_groq_api_key()
+    active_tavily = get_tavily_api_key()
+    if not active_groq or not active_tavily:
+        st.error("🔑 Please provide both **GROQ_API_KEY** and **TAVILY_API_KEY** in the sidebar (or Streamlit Cloud App Secrets) to begin research.")
+    elif not topic.strip():
         st.warning("Please enter a research topic first.")
     else:
         st.session_state.results = {}

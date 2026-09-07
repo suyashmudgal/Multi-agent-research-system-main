@@ -8,7 +8,25 @@ from typing import Optional
 
 load_dotenv()
 
-tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+def get_tavily_api_key():
+    key = os.getenv("TAVILY_API_KEY")
+    if not key:
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets") and "TAVILY_API_KEY" in st.secrets:
+                key = st.secrets["TAVILY_API_KEY"]
+        except Exception:
+            pass
+    return key or ""
+
+def get_tavily_client():
+    key = get_tavily_api_key()
+    if not key:
+        return None
+    try:
+        return TavilyClient(api_key=key)
+    except Exception:
+        return None
 
 _DISCOVERED_URLS = []
 
@@ -22,9 +40,13 @@ def search(query: str, top_n: Optional[int] = 5, source: Optional[str] = None) -
         source: Optional source filter (default None).
     """
     global _DISCOVERED_URLS
+    client = get_tavily_client()
+    if not client:
+        return "Tavily search error: TAVILY_API_KEY is not configured. Please set it in Streamlit Secrets or environment variables."
+
     max_results = top_n if (isinstance(top_n, int) and 1 <= top_n <= 10) else 5
     try:
-        results = tavily.search(query=query, max_results=max_results)
+        results = client.search(query=query, max_results=max_results)
     except Exception as e:
         return f"Search error: {e}"
 
@@ -67,13 +89,15 @@ def scrape_url(url: Optional[str] = None, cursor: Optional[int] = 0, loc: Option
             return "No valid HTTP URL was provided or found to scrape."
 
     raw_text = ""
-    # Fast path: try Tavily extract (handles dynamic JS, anti-bot protection, cleanly formats text)
-    try:
-        res = tavily.extract(urls=[target])
-        if res and res.get("results") and res["results"][0].get("raw_content"):
-            raw_text = res["results"][0]["raw_content"]
-    except Exception:
-        pass
+    # Fast path: try Tavily extract if client is configured
+    client = get_tavily_client()
+    if client:
+        try:
+            res = client.extract(urls=[target])
+            if res and res.get("results") and res["results"][0].get("raw_content"):
+                raw_text = res["results"][0]["raw_content"]
+        except Exception:
+            pass
 
     # Fallback: direct HTTP request with 4s timeout
     if not raw_text:

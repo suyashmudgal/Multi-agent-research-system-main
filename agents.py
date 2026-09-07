@@ -12,37 +12,49 @@ load_dotenv()
 DEFAULT_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 FALLBACK_MODEL = "openai/gpt-oss-20b"
 
-def get_llm(model=None, max_tokens=None):
+def get_groq_api_key(api_key=None):
+    key = api_key or os.getenv("GROQ_API_KEY")
+    if not key:
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+                key = st.secrets["GROQ_API_KEY"]
+        except Exception:
+            pass
+    return key or ""
+
+def get_llm(model=None, max_tokens=None, api_key=None):
+    key = get_groq_api_key(api_key)
     m = model or DEFAULT_MODEL
     kwargs = {"model": m, "temperature": 0, "max_retries": 3}
+    if key:
+        kwargs["api_key"] = key
     if max_tokens:
         kwargs["max_tokens"] = max_tokens
     return ChatGroq(**kwargs)
 
-llm = get_llm()
-
 # 1st agent: Search Agent
-def build_search_agent(model=None):
+def build_search_agent(model=None, api_key=None):
     prompt_msg = (
         "You are an autonomous research search agent. "
         "Use the search or web_search tool once with a targeted, keyword-rich query to find recent, reliable sources. "
         "After getting results, synthesize key findings clearly, include the source URLs found, and stop immediately."
     )
     return create_react_agent(
-        get_llm(model),
+        get_llm(model, api_key=api_key),
         tools=[search, web_search],
         prompt=prompt_msg
     )
 
 # 2nd agent: Reader Agent
-def build_reader_agent(model=None):
+def build_reader_agent(model=None, api_key=None):
     prompt_msg = (
         "You are a research reader agent. "
         "Inspect the search findings, identify the most authoritative URL, and call scrape_url with that URL. "
         "Summarize 3-5 factual insights from the scraped content and stop."
     )
     return create_react_agent(
-        get_llm(model),
+        get_llm(model, api_key=api_key),
         tools=[scrape_url, scrape],
         prompt=prompt_msg
     )
@@ -66,10 +78,8 @@ Structure the report with the following clear sections:
 Be detailed, factual, and professional."""),
 ])
 
-def build_writer_chain(model=None):
-    return writer_prompt | get_llm(model) | StrOutputParser()
-
-writer_chain = build_writer_chain()
+def build_writer_chain(model=None, api_key=None):
+    return writer_prompt | get_llm(model, api_key=api_key) | StrOutputParser()
 
 # Critic chain 
 critic_prompt = ChatPromptTemplate.from_messages([
@@ -94,7 +104,22 @@ Final Recommendation:
 [1-2 sentences on how to improve or finalize]"""),
 ])
 
-def build_critic_chain(model=None):
-    return critic_prompt | get_llm(model) | StrOutputParser()
+def build_critic_chain(model=None, api_key=None):
+    return critic_prompt | get_llm(model, api_key=api_key) | StrOutputParser()
 
-critic_chain = build_critic_chain()
+# Lazy wrappers for backward compatibility (prevents import-time crash when API keys are not yet set)
+class _LazyRunnable:
+    def __init__(self, builder_fn):
+        self._builder = builder_fn
+    def invoke(self, *args, **kwargs):
+        return self._builder().invoke(*args, **kwargs)
+
+class _LazyLLM:
+    def invoke(self, *args, **kwargs):
+        return get_llm().invoke(*args, **kwargs)
+    def __getattr__(self, name):
+        return getattr(get_llm(), name)
+
+writer_chain = _LazyRunnable(build_writer_chain)
+critic_chain = _LazyRunnable(build_critic_chain)
+llm = _LazyLLM()
